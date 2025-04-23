@@ -207,18 +207,17 @@ impl<'a> Car<'a> {
                 )
             };
     
-            // **1. Calculer l'angle de la direction**
-            let angle = direction.1.atan2(direction.0); // atan2(y, x) donne l'angle en radians
+
+            let angle = direction.1.atan2(direction.0); 
     
-            // **2. Calculer un vecteur perpendiculaire pour décaler à droite**
-            let perpendicular = (-angle.sin(), angle.cos()); // Rotation de 90° (droite)
+            let perpendicular = (-angle.sin(), angle.cos()); 
             let inc = if card_direction == Direction::North || card_direction == Direction::South {
                 new_hitbox.height()
             } else {
                 new_hitbox.width()
             };
-            // **3. Placer la zone de détection devant et à droite**
-            let detection_distance = inc as f32 * 1.4; // Distance devant
+            
+            let detection_distance = inc as f32 * 1.4; 
             let detection_x = position.x as f32 + detection_distance * angle.cos()
                 + DETECTION_OFFSET as f32 * perpendicular.0;
             let detection_y = position.y as f32 + detection_distance * angle.sin()
@@ -231,7 +230,7 @@ impl<'a> Car<'a> {
                 self.hit_box.height() + SAFE_DISTANCE,
             );
             
-            let detection_distance = inc as f32 * 2.8; // Distance devant
+            let detection_distance = inc as f32 * 2.8; 
             let detection_x = position.x as f32 + detection_distance * angle.cos()
                 + DETECTION_OFFSET as f32 * perpendicular.0;
             let detection_y = position.y as f32 + detection_distance * angle.sin()
@@ -275,7 +274,7 @@ impl<'a> Car<'a> {
                 }
             }
     
-            self.hit_box = new_hitbox; // Aucun obstacle, mise à jour de la position
+            self.hit_box = new_hitbox; 
         };
         self.velocity = BASE_VELOCITY;
 
