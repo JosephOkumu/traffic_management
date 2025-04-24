@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use sdl2::{pixels::Color, rect::{Point, Rect}, render::Canvas, video::Window};
+use rand::Rng;
 use crate::cars::Car;
 
 const BORDER_UP_LEFT: i32 = -40;
@@ -40,11 +41,71 @@ pub enum Direction {
     East,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TrafficLightState {
+    Red,
+    Green,
+}
+
+pub struct TrafficLight {
+    pub position: Point,
+    pub state: TrafficLightState,
+    pub timer: u32,
+    direction: Direction,
+}
+
+impl TrafficLight {
+    pub fn reposition_for_entry_lanes() -> Vec<Self> {
+        vec![
+            TrafficLight::new(Point::new(470, 470), TrafficLightState::Green, Direction::North), // North entry
+            TrafficLight::new(Point::new(610, 470), TrafficLightState::Red, Direction::South),   // South entry
+            TrafficLight::new(Point::new(470, 610), TrafficLightState::Red, Direction::West),    // West entry
+            TrafficLight::new(Point::new(610, 610), TrafficLightState::Green, Direction::East),  // East entry
+        ]
+    }
+
+    pub fn new(position: Point, initial_state: TrafficLightState, direction: Direction) -> Self {
+        Self {
+            position,
+            state: initial_state,
+            timer: 0,
+            direction,
+        }
+    }
+
+    pub fn update(&mut self) {
+        self.timer += 1;
+        if self.timer >= 200 { // Reduced cycle time for better flow
+            self.timer = 0;
+            // Coordinate lights based on direction pairs
+            // North-South pair and East-West pair alternate
+            match self.direction {
+                Direction::North | Direction::South => {
+                    self.state = match self.state {
+                        TrafficLightState::Red => TrafficLightState::Green,
+                        TrafficLightState::Green => TrafficLightState::Red,
+                    };
+                },
+                Direction::East | Direction::West => {
+                    self.state = match self.state {
+                        TrafficLightState::Green => TrafficLightState::Red,
+                        TrafficLightState::Red => TrafficLightState::Green,
+                    };
+                }
+            }
+        }
+    }
+
+    pub fn is_green(&self) -> bool {
+        self.state == TrafficLightState::Green
+    }
+}
+
 #[allow(dead_code)]
 impl Direction {
     /// Generate a random direction
     pub fn random() -> Self {
-        match rand::random_range(0..=3) {
+        match rand::thread_rng().gen_range(0..=3) {
             0 => Self::North,
             1 => Self::South,
             2 => Self::East,
@@ -105,7 +166,12 @@ fn get_points(from: Direction,to: Direction) -> Result<(Point,Vec<Point>),String
 
 pub fn spawn_car<'a>(from: Direction, to: Direction, car_w: u32, car_l: u32) -> Result<Car<'a>, String> {
     let (strt, path) = get_points(from, to)?;
-    let mut car = Car::new(strt, car_w, car_l, Color::BLUE);
+    let color = match (from, to) {
+        (Direction::North, Direction::East) | (Direction::South, Direction::West) => Color::YELLOW, // Right turn
+        (Direction::North, Direction::West) | (Direction::South, Direction::East) => Color::RED,    // Left turn
+        _ => Color::BLUE, // Straight
+    };
+    let mut car = Car::new(strt, car_w, car_l, color);
 
     car.set_path(path);
     Ok(car)

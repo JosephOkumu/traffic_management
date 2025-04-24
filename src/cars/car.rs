@@ -1,7 +1,9 @@
 use std::rc::Rc;
+use rand::Rng;
 
 use sdl2::{pixels::Color, rect::{Point, Rect}};
 use crate::entities::*;
+use crate::map::TrafficLight;
 use sdl2::render::Texture;
 
 
@@ -77,7 +79,8 @@ pub struct Car<'a> {
     path: Vec<Point>,
     current_direction: Direction,
 
-    debug : bool
+    debug: bool,
+    current_light: Option<Point>, // Track the first traffic light encountered
 }
 
 impl<'a> From<&'a Texture<'a>> for DisplayType<'a> {
@@ -121,6 +124,7 @@ impl<'a> Car<'a> {
             current_direction: Direction::North,
             debug: false,
             t_rect: None,
+            current_light: None,
         }
     }
 
@@ -152,15 +156,62 @@ impl<'a> Car<'a> {
 
     pub fn set_texture(&mut self,texture: &'a Texture<'a>) {
         self.sprite = DisplayType::from(texture);
-        let i: usize = rand::random_range(0..TRECTS.len());
+        let i: usize = rand::thread_rng().gen_range(0..TRECTS.len());
         let v = TRECTS[i];
         self.t_rect = Some(Rect::new(v.1, v.2, v.3, v.4))
     }
 
-    pub fn update(&mut self, others: Vec<Car>) -> UpdateState {
+    pub fn update(&mut self, others: Vec<Car>, traffic_lights: &[TrafficLight]) -> UpdateState {
         if self.path.is_empty() {
             self.state = UpdateState::Finished;
-            return UpdateState::Finished; // Plus de points à atteindre
+            return UpdateState::Finished; // No more points to reach
+        }
+    
+        // Check traffic lights only if we haven't entered the intersection
+        if !self.has_entered_intersection() {
+            let light_detection = Rect::from_center(self.hit_box.center(), 100, 100);
+            
+            // Define the coordinates for left-side traffic lights based on car's direction
+            let left_light_pos = match self.current_direction {
+                Direction::North => Point::new(470, 470), // Left light for northbound
+                Direction::South => Point::new(610, 610), // Left light for southbound
+                Direction::East => Point::new(470, 610),  // Left light for eastbound
+                Direction::West => Point::new(610, 470),  // Left light for westbound
+            };
+            
+            match self.current_light {
+                // If we already have a tracked light, check only that one
+                Some(tracked_position) => {
+                    if tracked_position == left_light_pos {
+                        for light in traffic_lights {
+                            if light.position == tracked_position {
+                                if !light.is_green() {
+                                    self.state = UpdateState::Waiting;
+                                    return UpdateState::Waiting;
+                                }
+                                break;
+                            }
+                        }
+                    }
+                },
+                // If we don't have a tracked light yet, only consider the left light
+                None => {
+                    for light in traffic_lights {
+                        if light.position == left_light_pos &&
+                           light_detection.has_intersection(Rect::from_center(light.position, 100, 100)) {
+                            self.current_light = Some(light.position);
+                            if !light.is_green() {
+                                self.state = UpdateState::Waiting;
+                                return UpdateState::Waiting;
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        } else {
+            // Reset light tracking once we've entered the intersection
+            self.current_light = None;
         }
 
         let target = self.path[0]; // Prochain point à atteindre
@@ -257,11 +308,12 @@ impl<'a> Car<'a> {
                     self.hit_box = new_hitbox;
                     return UpdateState::Slowing;
                 }
-
+                
                 // Stop and wait if too close to other vehicles
-                if ahead_box_lower.has_intersection(other.get_hitbox()) ||
+                if !self.has_entered_intersection() && (
+                   ahead_box_lower.has_intersection(other.get_hitbox()) ||
                    ahead_box_upper.has_intersection(other.detection_lower) ||
-                   ahead_box_upper.has_intersection(other.get_hitbox()) {
+                   ahead_box_upper.has_intersection(other.get_hitbox())) {
                     // Allow passing only if other car is waiting and we have right of way
                     if other.state == UpdateState::Waiting &&
                        self.is_on_right(other) &&
@@ -272,6 +324,7 @@ impl<'a> Car<'a> {
                     self.state = UpdateState::Waiting;
                     return UpdateState::Waiting;
                 }
+                
             }
     
             self.hit_box = new_hitbox; 
@@ -280,6 +333,11 @@ impl<'a> Car<'a> {
 
         self.state = UpdateState::Moving;
         return UpdateState::Moving;
+    }
+
+    fn has_entered_intersection(&self) -> bool {
+        let intersection_area = Rect::new(470, 470, 140, 140); // Define the intersection bounds
+        self.hit_box.has_intersection(intersection_area)
     }
 
 }

@@ -37,6 +37,7 @@ fn main() -> Result<(), String> {
     let mut event_pump = sdl_context.event_pump()?;
 
     let mut cars: Vec<cars::Car> = Vec::new();
+    let mut traffic_lights = map::TrafficLight::reposition_for_entry_lanes();
 
     let mut cooldown_now = std::time::Instant::now();
     let mut tick_time = std::time::Instant::now();
@@ -84,7 +85,7 @@ fn main() -> Result<(), String> {
         for (i,c) in cars.iter_mut().enumerate() {
             let mut tmp = cars_clone.clone();
             tmp.remove(i);
-            match  c.update(tmp) {
+            match  c.update(tmp, &traffic_lights) {
                 UpdateState::Finished => to_remove = i as i32,
                 UpdateState::Waiting => {
                     match (debug,c.get_detections()) {
@@ -113,6 +114,13 @@ fn main() -> Result<(), String> {
             }
             c.set_debug(debug);
             c.display(&mut canvas).unwrap();
+        }
+
+        // Update and render traffic lights
+        for light in &mut traffic_lights {
+            light.update();
+            canvas.set_draw_color(if light.is_green() { Color::GREEN } else { Color::RED });
+            canvas.fill_rect(sdl2::rect::Rect::from_center(light.position, 20, 20))?;
         }
         if to_remove != -1 {
             car_passed += 1;
