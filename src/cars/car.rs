@@ -8,9 +8,10 @@ use sdl2::render::Texture;
 
 
 const BASE_VELOCITY: u32 = 4;
-const SLOW_VELOCITY: u32 = BASE_VELOCITY;
-const SAFE_DISTANCE: u32 = 20;
-const DETECTION_OFFSET: i32 = -0;
+const SLOW_VELOCITY: u32 = 2;  // Reduced speed for safety
+const SAFE_DISTANCE: u32 = 40; // Increased safe distance
+const TURN_VELOCITY: u32 = 2;  // Slower speed for turns
+const DETECTION_OFFSET: i32 = 10; // Increased detection offset
 
 const TRECTS: [(&str,i32,i32,u32,u32);12] = 
 [
@@ -301,8 +302,10 @@ impl<'a> Car<'a> {
                     return UpdateState::Collided;
                 }
 
-                // Early detection for slowing down
-                if ahead_box_upper.has_intersection(other.detection_upper) && other.state != UpdateState::Slowing {
+                // Early detection for slowing down - more aggressive
+                if (ahead_box_upper.has_intersection(other.detection_upper) ||
+                    ahead_box_upper.has_intersection(other.detection_lower)) &&
+                    other.state != UpdateState::Slowing {
                     self.state = UpdateState::Slowing;
                     self.velocity = SLOW_VELOCITY;
                     self.hit_box = new_hitbox;
@@ -310,19 +313,29 @@ impl<'a> Car<'a> {
                 }
                 
                 // Stop and wait if too close to other vehicles
-                if !self.has_entered_intersection() && (
-                   ahead_box_lower.has_intersection(other.get_hitbox()) ||
-                   ahead_box_upper.has_intersection(other.detection_lower) ||
-                   ahead_box_upper.has_intersection(other.get_hitbox())) {
-                    // Allow passing only if other car is waiting and we have right of way
-                    if other.state == UpdateState::Waiting &&
-                       self.is_on_right(other) &&
-                       !ahead_box_lower.has_intersection(other.get_hitbox()) {
-                        continue;
+                if !self.has_entered_intersection() {
+                    let is_too_close = ahead_box_lower.has_intersection(other.get_hitbox()) ||
+                                     ahead_box_upper.has_intersection(other.detection_lower) ||
+                                     ahead_box_upper.has_intersection(other.get_hitbox());
+                    
+                    if is_too_close {
+                        // Allow passing only if other car is waiting and we have right of way
+                        if other.state == UpdateState::Waiting &&
+                           self.is_on_right(other) &&
+                           !ahead_box_lower.has_intersection(other.get_hitbox()) {
+                            // Proceed with caution
+                            self.velocity = SLOW_VELOCITY;
+                            continue;
+                        }
+                        // Otherwise wait
+                        self.state = UpdateState::Waiting;
+                        return UpdateState::Waiting;
                     }
-                    // Otherwise wait
-                    self.state = UpdateState::Waiting;
-                    return UpdateState::Waiting;
+                }
+
+                // Adjust speed for turns
+                if self.has_entered_intersection() {
+                    self.velocity = TURN_VELOCITY;
                 }
                 
             }
